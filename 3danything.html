@@ -1,0 +1,268 @@
+<html><head><base href="https://cube.hyperfusion.io/"><title>3D Text Shape Generator</title><style>
+  body {
+    margin: 0;
+    padding: 0;
+    background-color: #000;
+    overflow: hidden;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    font-family: Arial, sans-serif;
+    color: #0f0;
+  }
+  #point-cloud-container {
+    perspective: 1000px;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+  #point-cloud {
+    position: relative;
+    transform-style: preserve-3d;
+    width: 0;
+    height: 0;
+  }
+  .dot {
+    position: absolute;
+    transform-style: preserve-3d;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 12px;
+  }
+  #controls {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    background-color: rgba(0,0,0,0.7);
+    padding: 10px;
+    border-radius: 5px;
+  }
+  label, input, select { display: block; margin-bottom: 5px; }
+  #action-buttons {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 10px;
+  }
+  .button {
+    padding: 5px 10px;
+    background-color: #333;
+    color: #0f0;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    margin-right: 5px;
+  }
+  .button:hover {
+    background-color: #444;
+  }
+  .dot-size-control, .dot-symbol-control {
+    display: flex;
+    align-items: center;
+  }
+  #dotSizeValue, #dotSymbol {
+    width: 30px;
+    text-align: center;
+    margin-left: 10px;
+  }
+</style></head><body>
+  <div id="point-cloud-container">
+    <div id="point-cloud"></div>
+  </div>
+  <div id="controls">
+    <label for="textInput">Enter Text:</label>
+    <input type="text" id="textInput" value="3D">
+    <label for="dotCount">Number of Dots:</label>
+    <input type="number" id="dotCount" min="100" max="10000" value="2000">
+    <label for="dotSize">Dot Size:</label>
+    <div class="dot-size-control">
+      <input type="range" id="dotSize" min="0.1" max="20" step="0.1" value="4">
+      <input type="number" id="dotSizeValue" min="0.1" max="20" step="0.1" value="4">
+    </div>
+    <label for="dotSymbol">Dot Symbol:</label>
+    <div class="dot-symbol-control">
+      <input type="text" id="dotSymbol" value="•" maxlength="1">
+    </div>
+    <div id="action-buttons">
+      <button class="button" onclick="updateText()">Update Text</button>
+      <button class="button" onclick="randomizeColors()">Randomize Colors</button>
+    </div>
+  </div>
+
+  <script>
+    const pointCloudContainer = document.getElementById('point-cloud-container');
+    const pointCloud = document.getElementById('point-cloud');
+    let rotateX = 0;
+    let rotateY = 0;
+    let translateX = 0;
+    let translateY = 0;
+    let scale = 1;
+    let isDragging = false;
+    let isPanning = false;
+    let lastMouseX, lastMouseY;
+    let dots = [];
+
+    function createDot(x, y, z) {
+      const dot = document.createElement('div');
+      dot.className = 'dot';
+      const dotSize = document.getElementById('dotSize').value;
+      dot.style.width = `${dotSize}px`;
+      dot.style.height = `${dotSize}px`;
+      dot.style.transform = `translate3d(${x}px, ${y}px, ${z}px)`;
+      dot.style.color = getRandomColor();
+      dot.textContent = document.getElementById('dotSymbol').value;
+      pointCloud.appendChild(dot);
+      dots.push(dot);
+    }
+
+    function getRandomColor() {
+      return `hsl(${Math.random() * 360}, 100%, 50%)`;
+    }
+
+    function updateText() {
+      dots.forEach(dot => dot.remove());
+      dots = [];
+
+      const text = document.getElementById('textInput').value;
+      const count = parseInt(document.getElementById('dotCount').value);
+      
+      createTextShape(text, count);
+      updatePointCloudTransform();
+    }
+
+    function randomizeColors() {
+      dots.forEach(dot => {
+        dot.style.color = getRandomColor();
+      });
+    }
+
+    function createTextShape(text, count) {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      canvas.width = 1000;
+      canvas.height = 300;
+      ctx.font = 'bold 200px Arial';
+      ctx.fillStyle = 'white';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const pixels = imageData.data;
+      const points = [];
+
+      for (let i = 0; i < count; i++) {
+        let x, y;
+        do {
+          x = Math.floor(Math.random() * canvas.width);
+          y = Math.floor(Math.random() * canvas.height);
+        } while (pixels[(y * canvas.width + x) * 4] === 0);
+
+        const z = (Math.random() - 0.5) * 50;
+        points.push({x: x - canvas.width / 2, y: y - canvas.height / 2, z});
+      }
+
+      const scale = 1;
+      points.forEach(point => {
+        createDot(point.x * scale, point.y * scale, point.z * scale);
+      });
+    }
+
+    function updatePointCloudTransform() {
+      pointCloud.style.transform = `translateX(${translateX}px) translateY(${translateY}px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) scale3d(${scale}, ${scale}, ${scale})`;
+      updateDotsBillboard();
+    }
+
+    function updateDotsBillboard() {
+      const inverseRotationX = -rotateX;
+      const inverseRotationY = -rotateY;
+      dots.forEach(dot => {
+        dot.style.transform = `${dot.style.transform.split(') ')[0]}) rotateX(${inverseRotationX}deg) rotateY(${inverseRotationY}deg)`;
+      });
+    }
+
+    function updateDotSize() {
+      const newSize = parseFloat(document.getElementById('dotSize').value);
+      document.getElementById('dotSizeValue').value = newSize.toFixed(1);
+      dots.forEach(dot => {
+        dot.style.width = `${newSize}px`;
+        dot.style.height = `${newSize}px`;
+        dot.style.fontSize = `${newSize}px`;
+      });
+    }
+
+    function updateDotSizeFromInput() {
+      const newSize = parseFloat(document.getElementById('dotSizeValue').value);
+      document.getElementById('dotSize').value = newSize;
+      updateDotSize();
+    }
+
+    function updateDotSymbol() {
+      const newSymbol = document.getElementById('dotSymbol').value;
+      dots.forEach(dot => {
+        dot.textContent = newSymbol;
+      });
+    }
+
+    pointCloudContainer.addEventListener('mousedown', (event) => {
+      if (event.button === 0) { // Left click
+        isDragging = true;
+      } else if (event.button === 2) { // Right click
+        isPanning = true;
+      }
+      lastMouseX = event.clientX;
+      lastMouseY = event.clientY;
+    });
+
+    pointCloudContainer.addEventListener('mousemove', (event) => {
+      if (isDragging) {
+        const deltaX = event.clientX - lastMouseX;
+        const deltaY = event.clientY - lastMouseY;
+        rotateY += deltaX * 0.5;
+        rotateX -= deltaY * 0.5;
+        updatePointCloudTransform();
+      } else if (isPanning) {
+        const deltaX = event.clientX - lastMouseX;
+        const deltaY = event.clientY - lastMouseY;
+        translateX += deltaX;
+        translateY += deltaY;
+        updatePointCloudTransform();
+      }
+      lastMouseX = event.clientX;
+      lastMouseY = event.clientY;
+    });
+
+    pointCloudContainer.addEventListener('mouseup', (event) => {
+      if (event.button === 0) {
+        isDragging = false;
+      } else if (event.button === 2) {
+        isPanning = false;
+      }
+    });
+
+    pointCloudContainer.addEventListener('mouseleave', () => {
+      isDragging = false;
+      isPanning = false;
+    });
+
+    pointCloudContainer.addEventListener('wheel', (event) => {
+      event.preventDefault();
+      scale *= 1 + event.deltaY * -0.001;
+      scale = Math.max(0.1, Math.min(scale, 10)); // Limit scale between 0.1 and 10
+      updatePointCloudTransform();
+    });
+
+    pointCloudContainer.addEventListener('contextmenu', (event) => {
+      event.preventDefault(); // Prevent the default context menu
+    });
+
+    document.getElementById('dotSize').addEventListener('input', updateDotSize);
+    document.getElementById('dotSizeValue').addEventListener('input', updateDotSizeFromInput);
+    document.getElementById('dotSymbol').addEventListener('input', updateDotSymbol);
+
+    updateText();
+  </script>
+</body></html>
